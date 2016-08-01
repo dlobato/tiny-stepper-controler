@@ -16,7 +16,7 @@ FORMAT = ihex
 TARGET = main
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c scheduler.c pwm_read.c
+SRC = $(TARGET).c millis.c pwm_read.c
 
 # List Assembler source files here.
 #     Make them always end in a capital .S.  Files ending in a lowercase .s

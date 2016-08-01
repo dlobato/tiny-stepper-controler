@@ -8,14 +8,11 @@ volatile uint8_t _tcnt1 = 0;
 void init_pwm_read(void){
 	//init INT0 interrupt on rising_edge
 	GIMSK |= _BV(INT0); // Enable INT0
-	MCUCR = _BV(ISC00);// Trigger INT0 any logical change
+	MCUCR = _BV(ISC01) | _BV(ISC00);// Trigger INT0 on rising_edge
 
 	//timer1
 	TCCR1 = 0;//stop timer1
-	TCNT1 = 0;//reset timer1
 	_tcnt1 = 0;
-
-	//DDRB |= _BV(DEBUGPIN);
 }
 
 uint8_t pulse_width(){
@@ -28,36 +25,33 @@ uint16_t pulse_width_us(void){
 	return width_us;
 }
 
-//STATES: invalid signal, rising edge detected, falling edge detected
+/**
+* on rising edge: reset timer1 and start timer1 with prescaler 16 to measure pulse high width. Timer1 overflows
+* after aprox 4ms which should be enough to read pulses between 1ms to 2ms. If timer1 overflows timer1 is stop and current pwm width is set to 0 (no signal).
+* on falling edge: get timer1 counter and set current pwm width measure.
+*/
 ISR(INT0_vect){
 	if ( (PINB & _BV(INT0PIN)) != 0){//rising_edge
-		//starts timer1 with prescaler 16 -> overflows after aprox 4ms  -> if overflows invalid signal
 		TCCR1 = 0;//stop timer1
 		GTCCR |= _BV(PSR1);//reset timer1 prescaler counter
 		TCNT1 = 0;//reset timer1
-		TCCR1 = _BV(CS12) | _BV(CS10);;//start timer1 prescaler 16
-		TIMSK |= _BV(TOIE1);//enable timer1 overflow interrupt
-		//PORTB |= _BV(DEBUGPIN);
+		TCCR1 = _BV(CS12) | _BV(CS10);//start timer1 prescaler 16
+
+		MCUCR = _BV(ISC01);// Trigger INT0 on falling_edge
 	}else{//falling_edge
 		_tcnt1 = TCNT1;
 
-		//if there was overflow timer1 cnt is 0, do nothing
-		if (_tcnt1 != 0){
-			//starts timer1 with prescaler 256 -> overflows after aprox 65ms (65536 cycles) or 3 frames at 50Hz -> if overflows invalid signal
-			TCCR1 = 0;//stop timer1
-			GTCCR |= _BV(PSR1);//reset timer1 prescaler counter
-			TCNT1 = 0;//reset timer1
-			TCCR1 = _BV(CS13) | _BV(CS10);//start timer1 prescaler 256
-			TIMSK |= _BV(TOIE1);//enable timer1 overflow interrupt
-		}
-		//PORTB &= ~_BV(DEBUGPIN);
+		TCCR1 = 0;//stop timer1
+		GTCCR |= _BV(PSR1);//reset timer1 prescaler counter
+		TCNT1 = 0;//reset timer1
+		TCCR1 = _BV(CS13) | _BV(CS10);//start timer1 prescaler 256
+
+		MCUCR = _BV(ISC01) | _BV(ISC00);// Trigger INT0 on rising_edge
 	}
-	//PINB |= _BV(DEBUGPIN);
+	TIMSK |= _BV(TOIE1);//enable timer1 overflow interrupt
 }
 
 ISR(TIMER1_OVF_vect){
-	//if timer1 overflows, either after rising edge (signal out of bounds) or falling edge (lost signal)
-	_tcnt1 = 0;
-	TCCR1 = 0;//stop timer1
-	TCNT1 = 0;//reset timer1
+	//reset and wait for new pulse
+	init_pwm_read();
 }
