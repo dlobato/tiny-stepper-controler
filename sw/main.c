@@ -7,12 +7,14 @@
 */
 
 
+#include <stdlib.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/eeprom.h>
 #include <util/delay.h>
 #include "millis.h"
 #include "pwm_read.h"
+#include "debug.h"
 
 
 //set debugwire fuse
@@ -22,13 +24,12 @@
 
 
 //PINS
-#define LEDPIN PB1
 #define ENABLEPIN PB0
 #define STEPPIN PB3
 #define DIRPIN PB4
 
-#define BLINK_DELAY_MS 1000
-#define READ_PWM_DELAY_MS 20
+#define READ_PWM_DELAY_MS 100 //10Hz
+#define PRINT_DELAY 10000
 
 #define PWM_MID_POINT 1500
 #define PWM_MID_POINT_ERROR 50
@@ -39,15 +40,15 @@
 
 //lookup table to convert from dist to center point to step delay_ms
 //we are going to map dist_to_center_position range [0-500] -> distToDelay_Idx [0-8] ~ aprox /64
-uint8_t distToDelay[] = { 8, 7, 6, 5, 4, 3, 2, 1 };
+uint8_t distToDelay[8] = { 8, 7, 6, 5, 4, 3, 2, 1 };
 
 void setup(void){
 	//config outputs
-	DDRB |= _BV(LEDPIN) | _BV(ENABLEPIN) | _BV(STEPPIN) | _BV(DIRPIN);
+	DDRB |= _BV(ENABLEPIN) | _BV(STEPPIN) | _BV(DIRPIN);
 
-
-	init_timer0();//start timer0
+	init_timer0();
 	init_pwm_read();
+	debug_init();
 
 	sei();//enable global interrupts
 }
@@ -55,26 +56,23 @@ void setup(void){
 int
 main (void)
 {
-	setup();
-
 	uint32_t now;
-	uint32_t millis_last_blink = 0;
-	uint32_t millis_last_pwm_read = 0;
-	uint32_t millis_last_step = 0;
+	uint32_t millis_next_pwm_read = 0;
+	uint32_t millis_next_step = 0;
+	uint32_t millis_next_print = 0;
+
 	uint16_t pwm_us = 0;
-	uint8_t step_delay_ms;
+	uint8_t step_delay_ms = 0;
+
+	setup();
 
 	while(1){
 		now = millis();
 
-		if ((now - millis_last_blink) >= BLINK_DELAY_MS){
-			PINB = _BV(LEDPIN);//toogle pin value
-			millis_last_blink = now;
-		}
+		if (now >= millis_next_pwm_read) {
+			millis_next_pwm_read += READ_PWM_DELAY_MS;
 
-		if ((now - millis_last_pwm_read) >= READ_PWM_DELAY_MS){
 			pwm_us = pulse_width_us();
-			millis_last_pwm_read = now;
 			if ( (pwm_us < PWM_MIN_POINT || pwm_us > PWM_MAX_POINT ) ||
 				 (pwm_us > (PWM_MID_POINT - PWM_MID_POINT_ERROR) && pwm_us < (PWM_MID_POINT + PWM_MID_POINT_ERROR)) ){//pwm value out of range or middle point
 				PORTB |= _BV(ENABLEPIN);//disable motor
@@ -93,9 +91,14 @@ main (void)
 			}
 		}
 
-		if ((pwm_us != 0) && ((now - millis_last_step) >= step_delay_ms)){//pwm_us != 0 => motor enabled
+		if ((pwm_us != 0) && (now >= millis_next_step)){
+			millis_next_step += step_delay_ms;
 			PINB = _BV(STEPPIN);//toogle pin value
-			millis_last_step = now;
+		}
+
+		if (now >= millis_next_print) {
+			millis_next_print += PRINT_DELAY;
+			debug_print_P(PSTR("pwm_us=%u\r\n"), pulse_width_us());
 		}
 	}
 }

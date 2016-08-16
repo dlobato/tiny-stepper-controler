@@ -7,8 +7,8 @@ volatile uint8_t _tcnt1 = 0;
 
 void init_pwm_read(void){
 	//init INT0 interrupt on rising_edge
-	GIMSK |= _BV(INT0); // Enable INT0
 	MCUCR = _BV(ISC01) | _BV(ISC00);// Trigger INT0 on rising_edge
+	GIMSK |= _BV(INT0); // Enable INT0
 
 	//timer1
 	TCCR1 = 0;//stop timer1
