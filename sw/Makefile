@@ -37,7 +37,7 @@ OPT = s
 CSTANDARD = -std=gnu99
 
 # Place -D or -U options here
-CDEFS = -DF_CPU=$(F_CPU) -DDEBUG=1
+CDEFS = -DF_CPU=$(F_CPU) -DDEBUG=0
 
 # Place -I options here
 CINCS = -I ./utils
